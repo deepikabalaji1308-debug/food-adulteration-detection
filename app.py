@@ -31,7 +31,7 @@ st.set_page_config(
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "cleaned_food_adulteration_data.csv"
 
-FEATURES = ["product_name", "brand", "adulterant"]
+FEATURES = ["product_name", "brand", "adulterant","category"]
 TARGET = "severity"
 
 st.title("🥛 Food Adulteration Detection")
@@ -336,42 +336,44 @@ with col3:
         sorted(df["adulterant"].unique())
     )
 
-selected_model = st.selectbox(
-    "Prediction model",
-    list(trained_models.keys()),
-    key="prediction_model"
-)
-
-if st.button("Predict Severity", type="primary"):
+if st.button("Compare Predictions", type="primary"):
     input_data = pd.DataFrame([{
         "product_name": selected_product,
         "brand": selected_brand,
         "adulterant": selected_adulterant
     }])
 
-    model = trained_models[selected_model]
-    prediction = model.predict(input_data)[0]
+    st.subheader("Prediction Results")
 
-    st.subheader("Prediction Result")
-    st.metric("Predicted recorded severity", str(prediction))
+    result_columns = st.columns(len(trained_models))
+    for column, (name, model) in zip(result_columns, trained_models.items()):
+        prediction = model.predict(input_data)[0]
+        with column:
+            st.markdown(f"### {name}")
+            st.metric("Predicted recorded severity", str(prediction))
 
-    if hasattr(model, "predict_proba"):
-        probabilities = model.predict_proba(input_data)[0]
+            if hasattr(model, "predict_proba"):
+                probabilities = model.predict_proba(input_data)[0]
+                probability_df = pd.DataFrame({
+                    "Severity category": model.classes_,
+                    "Model score (%)": probabilities * 100
+                }).sort_values("Model score (%)", ascending=False)
 
-        probability_df = pd.DataFrame({
-            "Severity category": model.classes_,
-            "Model score": probabilities
-        }).sort_values("Model score", ascending=False)
+                st.write("Scores by severity category:")
+                st.dataframe(
+                    probability_df.style.format({"Model score (%)": "{:.2f}%"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                st.bar_chart(
+                    probability_df.set_index("Severity category")["Model score (%)"]
+                )
 
-        st.write("Model scores by category:")
-        st.bar_chart(
-            probability_df.set_index("Severity category")
-        )
-
-        st.caption(
-            "These are model scores, not calibrated probabilities of "
-            "real-world food safety or adulteration."
-        )
+    st.caption(
+        "Scores are model output probabilities for the listed classes, "
+        "not verified probabilities of real-world food safety or adulteration. "
+        "Different models can legitimately produce the same prediction or score."
+    )
 
 st.divider()
 
