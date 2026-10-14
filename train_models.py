@@ -19,7 +19,7 @@ from sklearn.metrics import (
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "cleaned_food_adulteration_data.csv"
 
-FEATURES = ["product_name", "brand", "adulterant","category"]
+FEATURES = ["product_name", "brand", "adulterant"]
 TARGET = "severity"
 
 
