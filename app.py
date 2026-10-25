@@ -31,7 +31,7 @@ st.set_page_config(
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "cleaned_food_adulteration_data.csv"
 
-FEATURES = ["accuracy"]
+FEATURES = ["adulterant"]
 TARGET = "severity"
 
 st.title("🥛 Food Adulteration Detection")
