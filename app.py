@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pandas as pd
@@ -31,20 +30,21 @@ st.set_page_config(
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "cleaned_food_adulteration_data.csv"
 
-FEATURES = ["product_name","brand","adulterant"]
+FEATURES = ["product_name", "brand", "adulterant"]
 TARGET = "severity"
 
 st.title("🥛 Food Adulteration Detection")
 st.subheader("Random Forest vs Gradient Boosting")
+
 st.write(
     "A machine-learning demonstration that predicts the recorded "
     "severity category from the dataset."
 )
 
 st.warning(
-    "Academic demonstration only. The supplied dataset contains "
-    "synthetic/randomized records. This application does not chemically "
-    "test food or establish whether a real sample is safe."
+    "Academic demonstration only. Model predictions depend on the "
+    "dataset labels and do not chemically test food or establish "
+    "whether a real sample is safe."
 )
 
 # ---------------- LOAD DATA ----------------
@@ -53,12 +53,16 @@ st.warning(
 def load_data(file_path):
     data = pd.read_csv(file_path)
 
+    # Remove accidental spaces in column names
+    data.columns = data.columns.str.strip()
+
     required = FEATURES + [TARGET]
     missing = [col for col in required if col not in data.columns]
 
     if missing:
         raise ValueError(
-            f"Required columns are missing from the CSV: {missing}"
+            f"Missing columns: {missing}. "
+            f"Available columns: {data.columns.tolist()}"
         )
 
     data = data[required].dropna().copy()
@@ -72,7 +76,9 @@ def load_data(file_path):
         raise ValueError("No usable rows were found in the dataset.")
 
     if data[TARGET].nunique() < 2:
-        raise ValueError("The severity target must have at least two classes.")
+        raise ValueError(
+            "The severity target must have at least two classes."
+        )
 
     return data
 
@@ -82,8 +88,8 @@ try:
 except Exception as error:
     st.error(f"Could not load the dataset: {error}")
     st.info(
-        "Place cleaned_food_adulteration_data.csv in the same folder "
-        "as app.py."
+        "Check that cleaned_food_adulteration_data.csv is in the "
+        "same folder as app.py and contains the required columns."
     )
     st.stop()
 
@@ -138,26 +144,27 @@ def build_model(classifier):
     ])
 
 
-model_definitions = {
-    "Random Forest": RandomForestClassifier(
-        n_estimators=300,
-        min_samples_leaf=2,
-        class_weight="balanced",
-        random_state=42,
-        n_jobs=-1
-    ),
-    "Gradient Boosting": GradientBoostingClassifier(
-        n_estimators=150,
-        learning_rate=0.05,
-        max_depth=2,
-        random_state=42
-    )
-}
-
-# ---------------- TRAIN AND EVALUATE ----------------
+# ---------------- TRAINING ----------------
 
 @st.cache_resource
 def train_models(X_train, y_train):
+    model_definitions = {
+        "Random Forest": RandomForestClassifier(
+            n_estimators=300,
+            min_samples_leaf=2,
+            class_weight="balanced",
+            random_state=42,
+            n_jobs=-1
+        ),
+
+        "Gradient Boosting": GradientBoostingClassifier(
+            n_estimators=150,
+            learning_rate=0.05,
+            max_depth=2,
+            random_state=42
+        )
+    }
+
     fitted_models = {}
 
     for name, classifier in model_definitions.items():
@@ -169,11 +176,13 @@ def train_models(X_train, y_train):
 
 
 try:
-    with st.spinner("Training and evaluating both models..."):
+    with st.spinner("Training and evaluating models..."):
         trained_models = train_models(X_train, y_train)
 except Exception as error:
     st.error(f"Model training failed: {error}")
     st.stop()
+
+# ---------------- MODEL PERFORMANCE ----------------
 
 results = []
 predictions_by_model = {}
@@ -201,8 +210,6 @@ for name, model in trained_models.items():
 
 results_df = pd.DataFrame(results)
 
-# ---------------- RESULTS TABLE ----------------
-
 st.header("2. Model Performance")
 
 st.write(
@@ -221,7 +228,7 @@ st.dataframe(
     hide_index=True
 )
 
-# ---------------- COMPARISON CHART ----------------
+# ---------------- PERFORMANCE CHART ----------------
 
 st.header("3. Performance Comparison")
 
@@ -236,8 +243,8 @@ ax.set_xlabel("Model")
 ax.set_title("Random Forest vs Gradient Boosting")
 ax.legend(loc="lower right")
 ax.tick_params(axis="x", rotation=0)
-fig.tight_layout()
 
+fig.tight_layout()
 st.pyplot(fig)
 plt.close(fig)
 
@@ -249,13 +256,11 @@ st.success(
     f"Best weighted F1 score on this test split: {best_model_name}"
 )
 
-
 # ---------------- CONFUSION MATRICES ----------------
 
 st.header("4. Confusion Matrices")
 
 labels = sorted(y.unique())
-
 col1, col2 = st.columns(2)
 
 for index, (name, predictions) in enumerate(
@@ -290,6 +295,7 @@ for index, (name, predictions) in enumerate(
         fig.tight_layout()
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
+
 # ---------------- CLASSIFICATION REPORT ----------------
 
 st.header("5. Classification Report")
@@ -312,8 +318,8 @@ st.text(
 st.header("6. Predict Recorded Severity")
 
 st.info(
-    "Choose values from the existing dataset. The output predicts the "
-    "recorded severity label; it is not a laboratory diagnosis."
+    "Choose values from the dataset. The prediction represents the "
+    "recorded severity label, not a laboratory diagnosis."
 )
 
 col1, col2, col3 = st.columns(3)
@@ -337,42 +343,62 @@ with col3:
     )
 
 if st.button("Compare Predictions", type="primary"):
+
     input_data = pd.DataFrame([{
         "product_name": selected_product,
         "brand": selected_brand,
         "adulterant": selected_adulterant
-    }])
+    }], columns=FEATURES)
 
     st.subheader("Prediction Results")
 
     result_columns = st.columns(len(trained_models))
-    for column, (name, model) in zip(result_columns, trained_models.items()):
+
+    for column, (name, model) in zip(
+        result_columns, trained_models.items()
+    ):
         prediction = model.predict(input_data)[0]
+
         with column:
             st.markdown(f"### {name}")
-            st.metric("Predicted recorded severity", str(prediction))
+            st.metric(
+                "Predicted recorded severity",
+                str(prediction)
+            )
 
             if hasattr(model, "predict_proba"):
-                probabilities = model.predict_proba(input_data)[0]
+                probabilities = model.predict_proba(
+                    input_data
+                )[0]
+
                 probability_df = pd.DataFrame({
                     "Severity category": model.classes_,
                     "Model score (%)": probabilities * 100
-                }).sort_values("Model score (%)", ascending=False)
+                }).sort_values(
+                    "Model score (%)",
+                    ascending=False
+                )
 
                 st.write("Scores by severity category:")
+
                 st.dataframe(
-                    probability_df.style.format({"Model score (%)": "{:.2f}%"}),
+                    probability_df.style.format({
+                        "Model score (%)": "{:.2f}%"
+                    }),
                     use_container_width=True,
                     hide_index=True
                 )
+
                 st.bar_chart(
-                    probability_df.set_index("Severity category")["Model score (%)"]
+                    probability_df.set_index(
+                        "Severity category"
+                    )["Model score (%)"]
                 )
 
     st.caption(
-        "Scores are model output probabilities for the listed classes, "
-        "not verified probabilities of real-world food safety or adulteration. "
-        "Different models can legitimately produce the same prediction or score."
+        "Scores are model output probabilities, not verified "
+        "probabilities of real-world food safety or adulteration. "
+        "Different models can legitimately produce the same prediction."
     )
 
 st.divider()
